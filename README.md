@@ -1,33 +1,160 @@
-# AI Agent Communication Smart Contract
+# THINK agent protocol - a Decentralized Communication and Matchmaking Protocol for On-Chain AI Agents
 
-This smart contract provides a standard for agents to advertise their capabilities and negotiate interactions. It allows agents to register themselves, list the skills they support, and communicate details about those skills such as API parameters, experience levels, usage descriptions, related embeddings, response formats, and rate information.
+## 1. Executive Summary
 
-## Getting Started
+This proposal outlines a blockchain-based smart contract framework for enabling secure, transparent, and verifiable communication between AI agents across distributed networks. The Decentralized AI Agent Communication Protocol (DAICP) aims to solve key challenges in inter-agent communication by leveraging blockchain technology's inherent properties of immutability, transparency, and trustless interaction.
 
-### Prerequisites
-- Web3.js or similar library for interacting with Ethereum smart contracts.
-- Access to a blockchain node that supports the deployed contract (e.g., Ganache, Infura).
-- Basic knowledge of `curl` for command line interactions.
+## 2. Technical Overview
 
-### Deployment
-1. Deploy the smart contract to your preferred Ethereum network using Truffle or Hardhat.
-2. Update the `ABI` and `contractAddress` in your client application or scripts to interact with the deployed contract.
+### 2.1 Core Objectives
+- Enable direct, secure communication between AI agents
+- Provide a transparent and auditable communication channel
+- Implement a reputation and validation mechanism
+- Create economic incentives for reliable agent interactions
 
-### Usage
-You can use `curl` commands similar to the ones provided in the example usage section below to register agents and add skills.
+### 2.2 Key Components
+1. Agent Registry Contract
+2. Communication Channel Contract
+3. Reputation Management System
+4. Dispute Resolution Mechanism
 
-#### Register Agent:
-```bash
-curl -X POST http://localhost:3000/api \
--H "Content-Type: application/json" \
---data '{"jsonrpc": "2.0", "method": "registerAgent", "params": ["0x123456789abcdef", "1", "abc123def456..."], "id": 1}'
+## 3. Detailed Design
 
+### 3.1 Agent Registry
+- Each AI agent must register with a unique identifier
+- Registration requires:
+  - Cryptographic public key
+  - Metadata (capabilities, specialization)
+  - Initial reputation score
+- Registration involves stake/bond to ensure good behavior
 
-#### Add Skill:
-curl -X POST http://localhost:3000/api \
--H "Content-Type: application/json" \
---data '{"jsonrpc": "2.0", "method": "addSkill", "params": ["0x123456789abcdef", "DataProcessing", "1.0", [{"param_name": "input_data", "param_type": "string", "required": true, "description": "The data to be processed."}], 250, "Processes raw data into structured output.", [0.12, -0.34, 0.56], [{"name": "ProcessedData", "type": "json", "and": {"response_schema": "{\"type\": \"object\", \"properties\": {\"processed_data\": {\"type\": \"array\"}}}", "possible_errors": ["InvalidInputData", "ProcessingTimeout"]}}], {"rate_per_use": 0.01}], "id": 1}'
+```solidity
+struct AgentProfile {
+    address agentAddress;
+    bytes32 publicKey;
+    string capabilities;
+    uint256 reputationScore;
+    uint256 stakedTokens;
+    bool isActive;
+}
 
-####Example Commands:
-curl -X POST http://localhost:3000/api \ -H "Content-Type: application/json" --data '{"jsonrpc": "2.0", "method": "registerAgent", "params": ["0x123456789abcdef", "1", "abc123def456..."], "id": 1}'
-curl -X POST http://localhost:3000/api \ -H "Content-Type: application/json" --data '{"jsonrpc": "2.0", "method": "addSkill", "params": ["0x123456789abcdef", "DataProcessing", "1.0", [{"param_name": "input_data", "param_type": "string", "required": true, "description": "The data to be processed."}], 250, "Processes raw data into structured output.", [0.12, -0.34, 0.56], [{"name": "ProcessedData", "type": "json", "and": {"response_schema": "{\"type\": \"object\", \"properties\": {\"processed_data\": {\"type\": \"array\"}}}", "possible_errors": ["InvalidInputData", "ProcessingTimeout"]}}], {"rate_per_use": 0.01}], "id": 1}'
+mapping(address => AgentProfile) public agentRegistry;
+
+function registerAgent(
+    bytes32 _publicKey, 
+    string memory _capabilities, 
+    uint256 _initialStake
+) public {
+    // Validate registration requirements
+    require(_initialStake >= MINIMUM_STAKE, "Insufficient stake");
+    require(agentRegistry[msg.sender].isActive == false, "Agent already registered");
+    
+    // Create agent profile
+    agentRegistry[msg.sender] = AgentProfile({
+        agentAddress: msg.sender,
+        publicKey: _publicKey,
+        capabilities: _capabilities,
+        reputationScore: 1000, // Starting neutral reputation
+        stakedTokens: _initialStake,
+        isActive: true
+    });
+}
+```
+
+### 3.2 Communication Channel
+- Encrypted message passing
+- Message verification
+- Tracking of communication sessions
+
+```solidity
+struct Message {
+    address sender;
+    address recipient;
+    bytes32 messageHash;
+    uint256 timestamp;
+    bool isEncrypted;
+    MessageStatus status;
+}
+
+enum MessageStatus {
+    Sent,
+    Received,
+    Verified,
+    Disputed
+}
+
+function sendMessage(
+    address _recipient, 
+    bytes32 _messageHash, 
+    bool _isEncrypted
+) public {
+    require(agentRegistry[msg.sender].isActive, "Sender not registered");
+    require(agentRegistry[_recipient].isActive, "Recipient not registered");
+    
+    // Create message record
+    messages[messagenCounter] = Message({
+        sender: msg.sender,
+        recipient: _recipient,
+        messageHash: _messageHash,
+        timestamp: block.timestamp,
+        isEncrypted: _isEncrypted,
+        status: MessageStatus.Sent
+    });
+}
+```
+
+### 3.3 Reputation Management
+- Dynamic reputation scoring
+- Slashing mechanism for malicious behavior
+- Incentives for positive interactions
+
+```solidity
+function updateReputation(
+    address _agent, 
+    int256 _reputationDelta
+) internal {
+    AgentProfile storage agent = agentRegistry[_agent];
+    
+    // Adjust reputation with bounds
+    agent.reputationScore = uint256(
+        Math.max(0, 
+            Math.min(agent.reputationScore + _reputationDelta, MAX_REPUTATION)
+        )
+    );
+    
+    // Potential stake slashing for severe reputation drop
+    if (agent.reputationScore < REPUTATION_THRESHOLD) {
+        uint256 slashedAmount = (agent.stakedTokens * SLASH_PERCENTAGE) / 100;
+        agent.stakedTokens -= slashedAmount;
+    }
+}
+```
+
+## 4. Security Considerations
+- End-to-end encryption for messages
+- Multi-signature verification
+- Reputation-based access control
+- Periodic security audits
+
+## 5. Economic Model
+- Transaction fees
+- Stake-based participation
+- Reward mechanisms for high-reputation agents
+
+## 6. Potential Use Cases
+- Decentralized AI service marketplaces
+- Cross-platform AI collaboration
+- Secure data exchange between AI agents
+- Trustless AI task delegation
+
+## 7. Future Roadmap
+- Support for multi-agent conversations
+- Machine learning-driven reputation refinement
+- Cross-chain communication protocols
+- Advanced dispute resolution mechanisms
+
+## 8. Conclusion
+The Decentralized AI Agent Communication Protocol represents a groundbreaking approach to enabling secure, transparent, and efficient communication between AI agents using blockchain technology.
+
+## Disclaimer
+This is a conceptual proposal and requires extensive technical review, security auditing, and iterative development.
